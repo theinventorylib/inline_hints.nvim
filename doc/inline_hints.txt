@@ -1,0 +1,590 @@
+*inline_hints.txt*  Context-aware inline navigation hints for Neovim
+
+==============================================================================
+CONTENTS                                            *inline-hints-contents*
+
+    1. Introduction ..................... |inline-hints-introduction|
+    2. Requirements ..................... |inline-hints-requirements|
+    3. Setup ............................ |inline-hints-setup|
+    4. Configuration .................... |inline-hints-configuration|
+    5. Usage ............................ |inline-hints-usage|
+    6. Contexts ......................... |inline-hints-contexts|
+    7. Combos ........................... |inline-hints-combos|
+    8. Commands ......................... |inline-hints-commands|
+    9. API .............................. |inline-hints-api|
+   10. Integrations ..................... |inline-hints-integrations|
+   11. Customization Examples ........... |inline-hints-examples|
+
+==============================================================================
+INTRODUCTION                                    *inline-hints-introduction*
+
+InlineHints displays context-aware navigation hints inline in your buffer,
+helping you discover and remember Vim/Neovim keybindings. Hints appear at
+the end of your current line and change based on cursor position, syntax
+context, and active modes.
+
+Features:
+  • Context-aware hints based on cursor position and syntax
+  • Combo sequence hints (g, d, c, y, z, [, ])
+  • Treesitter integration for smart code detection
+  • NvimTree support
+  • Git integration (gitsigns)
+  • Fold detection
+  • Which-key integration
+
+==============================================================================
+REQUIREMENTS                                    *inline-hints-requirements*
+
+  • Neovim >= 0.8.0
+  • Optional: nvim-treesitter for enhanced context detection
+  • Optional: gitsigns.nvim for git hints
+  • Optional: nvim-tree.lua for file tree hints
+  • Optional: which-key.nvim for combo integration
+
+==============================================================================
+SETUP                                                 *inline-hints-setup*
+
+Basic setup:
+>lua
+    require('inline_hints').setup()
+<
+
+With options:
+>lua
+    require('inline_hints').setup({
+      enable_combos = true,
+      toggle_key = "<leader>ih",
+      priority = 5000,
+      hl_group = "Comment",
+    })
+<
+
+With lazy.nvim:
+>lua
+    {
+      dir = vim.fn.stdpath("config") .. "/lua/inline_hints",
+      name = "inline_hints.nvim",
+      event = 'VeryLazy',
+      opts = {
+        enable_combos = true,
+        toggle_key = "<leader>ih",
+        hint_color = "#7aa2f7",  -- Optional custom color
+      },
+    }
+<
+
+==============================================================================
+CONFIGURATION                                 *inline-hints-configuration*
+                                              *inline-hints.config*
+
+Available options:
+
+enable_combos                                   *inline-hints.enable_combos*
+    Type: boolean
+    Default: `true`
+    
+    Enable combo hints for multi-key sequences like `g`, `d`, `c`, etc.
+
+toggle_key                                       *inline-hints.toggle_key*
+    Type: string|nil
+    Default: `nil`
+    
+    Key mapping to toggle hints on/off for current buffer.
+    Example: `"<leader>ih"`
+
+priority                                           *inline-hints.priority*
+    Type: number
+    Default: `5000`
+    
+    Priority for virtual text display (higher = more visible).
+
+hl_group                                           *inline-hints.hl_group*
+    Type: string
+    Default: `"Comment"`
+    
+    Highlight group for hint text (used as fallback if no custom colors).
+
+hint_color                                       *inline-hints.hint_color*
+    Type: string|nil
+    Default: `nil`
+    
+    Custom color for hint text in hex format (e.g., "#7aa2f7").
+    When set, overrides hl_group for hint text.
+
+icon_color                                       *inline-hints.icon_color*
+    Type: string|nil
+    Default: `nil`
+    
+    Custom color for icon in hex format (e.g., "#bb9af7").
+    When set, overrides hl_group for icon.
+
+show_icon                                         *inline-hints.show_icon*
+    Type: boolean
+    Default: `true`
+    
+    Whether to show the icon before hints.
+
+icon                                                   *inline-hints.icon*
+    Type: string
+    Default: `"💡"`
+    
+    Icon to display before hints (when show_icon is true).
+
+hints                                                 *inline-hints.hints*
+    Type: table
+    Default: `{}`
+    
+    Custom hints that override or extend defaults. Keys are context names,
+    values are hint strings. Custom hints will OVERRIDE matching default
+    hints, allowing you to completely customize any hint.
+>lua
+    hints = {
+      -- Override the default blank line hint
+      blank = "[o] new line  [p] paste  [CUSTOM]",
+      
+      -- Add a new custom context
+      my_context = "[custom] hint text",
+      
+      -- Disable a hint by setting it to empty string
+      comment = "",
+    }
+<
+
+combo_hints                                     *inline-hints.combo_hints*
+    Type: table
+    Default: `{}`
+    
+    Custom combo hints that override or extend defaults. Custom combo hints
+    will OVERRIDE matching default combo hints.
+>lua
+    combo_hints = {
+      -- Override the default 'g' combo
+      g = "[gd] def  [gr] refs  [CUSTOM]",
+      
+      -- Add a new combo key
+      ["<leader>"] = "[f] files  [g] git",
+    }
+<
+
+telescope_hints                             *inline-hints.telescope_hints*
+    Type: table
+    Default: `{}`
+    
+    Custom telescope-specific hints.
+>lua
+    telescope_hints = {
+      ["<leader>f"] = "[ff] files  [custom]",
+    }
+<
+
+disable_for                                     *inline-hints.disable_for*
+    Type: table
+    Default: `{}`
+    
+    List of contexts where hints should be completely disabled. Can include:
+    - Filetype strings (e.g., "copilot-chat", "avante")
+    - Buffer name patterns
+    - Custom functions that return true to disable
+>lua
+    disable_for = {
+      "copilot-chat",   -- Disable for this filetype
+      "TelescopePrompt",
+      "noice",
+      function()
+        -- Custom logic: disable if in a prompt buffer
+        return vim.bo.buftype == "prompt"
+      end,
+    }
+<
+
+plugin_hints                                   *inline-hints.plugin_hints*
+    Type: table
+    Default: `{}`
+    
+    Custom hints for specific plugin filetypes or buffer patterns.
+    Takes precedence over disable_for - if a filetype is in both,
+    plugin_hints will be shown.
+>lua
+    plugin_hints = {
+      ["copilot-chat"] = "[<CR>] send  [q] quit  [<C-c>] cancel",
+      ["avante"] = "[<CR>] apply  [y] accept  [n] reject",
+      -- Pattern matching for buffer names
+      [".*Avante.*"] = "[custom] hint for Avante buffers",
+    }
+<
+
+==============================================================================
+USAGE                                                 *inline-hints-usage*
+
+Once setup, InlineHints works automatically:
+
+1. Move your cursor around - hints update based on context
+2. Press combo keys (g, d, c, y, z, [, ]) - see follow-up options
+3. Toggle hints with your configured toggle_key
+4. Hints disappear in insert mode
+
+Example workflow:
+
+  • Cursor on function name → Shows: [gd] def  [gr] refs  [K] hover
+  • Press `g` → Shows: [gd] def  [gr] refs  [gf] file  [gg] top
+  • Cursor on `{` → Shows: [%] match  [ci}] change  [z] folds
+  • Press `z` → Shows: [zz] center  [za] toggle fold  [zR] open all
+
+==============================================================================
+CONTEXTS                                           *inline-hints-contexts*
+
+InlineHints detects these contexts:
+
+default                                         *inline-hints-ctx-default*
+    General navigation when no specific context matches.
+
+cursor_line                                 *inline-hints-ctx-cursor-line*
+    Basic line navigation hints.
+
+blank                                             *inline-hints-ctx-blank*
+    Hints for blank lines (insert, paste, etc).
+
+comment                                         *inline-hints-ctx-comment*
+    Hints when cursor is on a comment line.
+
+function_def                               *inline-hints-ctx-function-def*
+    Hints when on a function definition.
+
+function_call                             *inline-hints-ctx-function-call*
+    Hints when on a function call.
+
+string                                           *inline-hints-ctx-string*
+    Hints when cursor is on a string.
+
+variable                                       *inline-hints-ctx-variable*
+    Hints when on a variable identifier.
+
+class_def                                     *inline-hints-ctx-class-def*
+    Hints when on a class definition.
+
+inside_parens                             *inline-hints-ctx-inside-parens*
+inside_brackets                         *inline-hints-ctx-inside-brackets*
+inside_braces                             *inline-hints-ctx-inside-braces*
+    Hints when cursor is on structural characters.
+
+line_start                                   *inline-hints-ctx-line-start*
+line_end                                       *inline-hints-ctx-line-end*
+    Hints at line boundaries.
+
+search_active                             *inline-hints-ctx-search-active*
+    Hints when search highlighting is active.
+
+foldable                                       *inline-hints-ctx-foldable*
+folded                                           *inline-hints-ctx-folded*
+    Hints for foldable/folded code sections.
+
+nvimtree_file                             *inline-hints-ctx-nvimtree-file*
+nvimtree_dir                               *inline-hints-ctx-nvimtree-dir*
+nvimtree_general                       *inline-hints-ctx-nvimtree-general*
+    NvimTree-specific hints.
+
+git_hunk                                       *inline-hints-ctx-git-hunk*
+    Hints when cursor is in a git hunk (requires gitsigns).
+
+==============================================================================
+COMBOS                                               *inline-hints-combos*
+
+Combo keys trigger sequential hint displays:
+
+g                                                   *inline-hints-combo-g*
+    Goto/git operations: [gd] def  [gr] refs  [gf] file  [gg] top
+
+d                                                   *inline-hints-combo-d*
+    Delete operations: [dd] line  [dw] word  [d$] to end  [dap] para
+
+c                                                   *inline-hints-combo-c*
+    Change operations: [cc] line  [cw] word  [c$] to end  [cap] para
+
+y                                                   *inline-hints-combo-y*
+    Yank operations: [yy] line  [yw] word  [y$] to end  [yap] para
+
+z                                                   *inline-hints-combo-z*
+    View/fold operations: [zz] center  [zt] top  [za] toggle fold
+
+[                                                   *inline-hints-combo-[*
+    Previous operations: [[c] prev change  [[m] prev method
+
+]                                                   *inline-hints-combo-]*
+    Next operations: []c] next change  []m] next method
+
+==============================================================================
+COMMANDS                                           *inline-hints-commands*
+
+:InlineHintsToggle                               *:InlineHintsToggle*
+    Toggle inline hints on/off for the current buffer.
+
+:InlineHintsEnable                               *:InlineHintsEnable*
+    Enable inline hints for the current buffer.
+
+:InlineHintsDisable                             *:InlineHintsDisable*
+    Disable inline hints for the current buffer.
+
+==============================================================================
+API                                                     *inline-hints-api*
+
+require('inline_hints')                           *require('inline_hints')*
+
+Main plugin module. Returns a table with:
+
+.setup({opts})                                    *inline-hints.setup()*
+    Initialize the plugin with options.
+    
+    Parameters: ~
+        {opts}  (table|nil)  Configuration options
+    
+    Usage: ~
+>lua
+        require('inline_hints').setup({
+          enable_combos = true,
+          toggle_key = "<leader>ih",
+        })
+<
+
+.hints                                               *inline-hints.hints*
+    Access to hints module for customization.
+    
+    Methods: ~
+        .get(context)           Get hint for context
+        .set(context, hint)     Set hint for context
+        .merge(custom_hints)    Merge custom hints (overrides defaults)
+        .override(custom_hints) Alias for .merge() (more explicit)
+        .disable(context)       Disable a specific hint
+        .reset()                Reset all hints to defaults
+
+.combos                                             *inline-hints.combos*
+    Access to combos module.
+    
+    Methods: ~
+        .get(key)              Get combo hint for key
+        .is_combo_key(key)     Check if key is combo starter
+        .merge_combos(custom)  Merge custom combo hints (overrides defaults)
+
+.display                                           *inline-hints.display*
+    Access to display module.
+    
+    Methods: ~
+        .show_hints()       Show hints for current context
+        .clear(buf)         Clear hints from buffer
+
+.config                                             *inline-hints.config*
+    Access to config module.
+    
+    Methods: ~
+        .get()              Get current configuration
+        .setup(opts)        Initialize configuration
+
+Convenience Functions                         *inline-hints-convenience*
+
+.override_hints({custom_hints})              *inline-hints.override_hints()*
+    Override hints at runtime and refresh display immediately.
+    
+    Parameters: ~
+        {custom_hints}  (table)  Table of context -> hint mappings
+    
+    Usage: ~
+>lua
+        local ih = require('inline_hints')
+        ih.override_hints({
+          blank = "[o] below  [CUSTOM]",
+          function_def = "[gd] goto  [K] docs",
+        })
+<
+
+.disable_hint({context})                      *inline-hints.disable_hint()*
+    Disable a specific hint context at runtime.
+    
+    Parameters: ~
+        {context}  (string)  The context name to disable
+    
+    Usage: ~
+>lua
+        require('inline_hints').disable_hint('comment')
+<
+
+.reset_hints()                                  *inline-hints.reset_hints()*
+    Reset all hints to their default values and refresh display.
+    
+    Usage: ~
+>lua
+        require('inline_hints').reset_hints()
+<
+
+==============================================================================
+INTEGRATIONS                                   *inline-hints-integrations*
+
+WHICH-KEY                                 *inline-hints-which-key*
+
+InlineHints automatically integrates with which-key.nvim:
+  • Hides which-key popup during combo sequences
+  • Restores which-key after combo completion
+  • No configuration needed
+
+GITSIGNS                                   *inline-hints-gitsigns*
+
+Shows git-specific hints when in changed hunks:
+  • Requires gitsigns.nvim
+  • Automatic detection
+  • Hints for stage, reset, preview operations
+
+NVIMTREE                                   *inline-hints-nvimtree*
+
+Context-aware hints in file tree:
+  • Different hints for files vs directories
+  • Navigation and file operation hints
+  • Automatic detection
+
+TREESITTER                               *inline-hints-treesitter*
+
+Enhanced context detection:
+  • Function/class detection
+  • String/comment context
+  • Fold detection
+  • Works best with nvim-treesitter
+
+==============================================================================
+CUSTOMIZATION EXAMPLES                           *inline-hints-examples*
+
+OVERRIDE HINTS IN SETUP ~
+
+Override hints during initial setup:
+>lua
+    require('inline_hints').setup({
+      hints = {
+        -- Completely replace the default blank line hint
+        blank = "[o] insert below  [O] insert above  [p] paste",
+        
+        -- Override function definition hints
+        function_def = "[gd] goto def  [K] hover  [<leader>r] rename",
+        
+        -- Disable comment hints
+        comment = "",
+        
+        -- Add custom context
+        my_special_context = "[x] special action",
+      },
+      
+      combo_hints = {
+        -- Override 'g' combo
+        g = "[gd] definition  [gr] references  [gi] implementation",
+        
+        -- Override 'd' combo
+        d = "[dd] line  [dw] word  [dap] paragraph",
+      },
+    })
+<
+
+OVERRIDE HINTS AT RUNTIME ~
+
+Change hints dynamically after setup:
+>lua
+    local ih = require('inline_hints')
+    
+    -- Override multiple hints at once
+    ih.override_hints({
+      blank = "[o] new line below",
+      string = "[ci'] change inside",
+    })
+    
+    -- Disable a specific hint
+    ih.disable_hint('comment')
+    
+    -- Reset all hints to defaults
+    ih.reset_hints()
+<
+
+CONDITIONAL HINTS BY FILETYPE ~
+
+Set different hints based on filetype:
+>lua
+    require('inline_hints').setup({
+      hints = {
+        -- Override Lua-specific hints
+        lua = "[gd] def  [K] docs  [:so %] source  [:lua %] run",
+        
+        -- Override Python-specific hints
+        python = "[gd] def  [K] docs  [:!python3 %] run",
+        
+        -- Add TypeScript hints
+        typescript = "[gd] def  [gr] refs  [:!ts-node %] run",
+      },
+    })
+<
+
+CUSTOM COMBO SEQUENCES ~
+
+Add your own combo sequences:
+>lua
+    require('inline_hints').setup({
+      combo_hints = {
+        -- Add custom leader key combos
+        ["<leader>f"] = "[ff] files  [fg] git  [fb] buffers  [fh] help",
+        ["<leader>g"] = "[gg] status  [gc] commits  [gb] branches",
+        
+        -- Override existing combos
+        z = "[zz] center  [zt] top  [zb] bottom  [za] fold toggle",
+      },
+    })
+<
+
+DISABLE DEFAULT HINTS ~
+
+Disable specific default hints you don't want:
+>lua
+    require('inline_hints').setup({
+      hints = {
+        -- Disable by setting to empty string
+        comment = "",
+        line_start = "",
+        line_end = "",
+      },
+    })
+<
+
+USE WITH AUTOCMD FOR CONTEXT-SPECIFIC OVERRIDES ~
+
+>lua
+    require('inline_hints').setup()
+    
+    -- Override hints when entering specific filetypes
+    vim.api.nvim_create_autocmd("FileType", {
+      pattern = "rust",
+      callback = function()
+        require('inline_hints').override_hints({
+          function_def = "[gd] def  [K] docs  [:RustRun] run",
+          variable = "[gd] def  [:RustHoverActions] actions",
+        })
+      end,
+    })
+<
+
+DISABLE FOR SPECIFIC PLUGINS ~
+
+Disable hints when using plugins with their own UI:
+>lua
+    require('inline_hints').setup({
+      -- Completely disable for these contexts
+      disable_for = {
+        "copilot-chat",
+        "avante",
+        "TelescopePrompt",
+        "noice",
+        function()
+          return vim.bo.buftype == "prompt"
+        end,
+      },
+      
+      -- Or provide custom hints instead (takes precedence)
+      plugin_hints = {
+        ["copilot-chat"] = "[<CR>] send  [<C-c>] cancel  [q] quit",
+        ["avante"] = "[<CR>] apply  [y] accept  [n] reject  [q] close",
+      },
+    })
+<
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
