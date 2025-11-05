@@ -75,7 +75,6 @@ With lazy.nvim:
 
 ==============================================================================
 CONFIGURATION                                 *inline-hints-configuration*
-                                              *inline-hints.config*
 
 Available options:
 
@@ -130,7 +129,7 @@ icon                                                   *inline-hints.icon*
     
     Icon to display before hints (when show_icon is true).
 
-hints                                                 *inline-hints.hints*
+hints                                                 *inline-hints.hints-option*
     Type: table
     Default: `{}`
     
